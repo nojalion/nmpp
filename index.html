@@ -286,11 +286,19 @@
         const files = Array.from(e.target.files);
         if (files.length === 0) return;
 
+        // インポート前のライブラリが空だったかどうかを記憶しておく
+        const wasEmpty = state.queue.length === 0;
+
         statusText.innerText = "曲をアプリに保存中...";
         await Promise.all(files.map(file => saveSongToDB(file)));
         await refreshLibrary();
         statusText.innerText = "保存が完了しました！";
         setTimeout(() => statusText.innerText = "", 3000);
+
+        // 💡 変更点：空の状態から新しく曲が追加された場合、自動で1曲目をセット
+        if (wasEmpty && state.queue.length > 0) {
+            setupInitialTrack(0); // 1曲目を選択状態（待機状態）にする
+        }
     });
 
     function loadAndPlay(index) {
