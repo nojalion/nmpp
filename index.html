@@ -170,7 +170,7 @@
     <div id="status-text" class="status-msg"></div>
 
     <div class="now-playing">
-        <div class="track-title" id="current-title">ライブラリが空です</div>
+        <div class="track-title" id="current-title">- No Tracks -</div>
     </div>
 
     <div class="controls">
@@ -344,7 +344,7 @@
     clearAllBtn.addEventListener('click', async () => {
         if (state.queue.length === 0) return;
 
-        if (confirm("アプリ内のすべての曲を一括削除しますか？\nこの操作は取り消せません。")) {
+        if (confirm("このアプリ内のすべての曲を一括削除しますか？\nこの操作は取り消せません。")) {
             statusText.innerText = "ライブラリをクリア中...";
 
             // 1. 再生中のオーディオを安全に停止し、Object URLのメモリを解放
@@ -374,7 +374,7 @@
 
         if (state.queue.length === 0) {
             playlistView.innerHTML = '<div class="status-msg" style="text-align:center; padding:20px;">曲が保存されていません。<br>上のボタンからインポートしてください。</div>';
-            titleView.innerText = "ライブラリが空です";
+            titleView.innerText = "- No Tracks -";
             clearAllBtn.style.display = 'none'; // 💡 曲がないときはボタンを隠す
             return;
         }
