@@ -316,11 +316,20 @@
         setupMediaSession(songRecord.name.replace(/\.[^/.]+$/, ""));
     }
 
+// 💡 修正前：文字を変えるだけだった関数を、実体も読み込むように修正
     function setupInitialTrack(index) {
+        if (index < 0 || index >= state.queue.length) return; // セーフティ
         state.currentIndex = index;
+        
         const songRecord = state.queue[index];
         titleView.innerText = songRecord.name.replace(/\.[^/.]+$/, "");
+        
+        // 💡 追加：再生はせず、音楽の実体（Object URL）だけをプレイヤーに装填する
+        if (audioEngine.src) { URL.revokeObjectURL(audioEngine.src); }
+        audioEngine.src = URL.createObjectURL(songRecord.data);
+        
         updatePlaylistHighlight();
+        setupMediaSession(songRecord.name.replace(/\.[^/.]+$/, ""));
     }
 
     function playNext() {
