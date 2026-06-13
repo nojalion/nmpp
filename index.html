@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NMPP</title>
+    <title>NMMP</title>
     <style>
         :root {
             --bg-color: #121212;
             --card-color: #1e1e1e;
-            --accent-color: #e91e63; /* お気に入り用のピンク・レッド */
-            --spotify-green: #1db954;
+            --accent-color: #1db954; 
+            --delete-color: #ff5252;
             --text-color: #ffffff;
             --text-sub: #b3b3b3;
         }
@@ -34,20 +34,21 @@
             max-width: 360px;
             text-align: center;
         }
-        h2 { margin-top: 0; font-size: 1.4rem; color: var(--text-color); }
+        h2 { margin-top: 0; font-size: 1.4rem; }
         
         .file-input-label {
             display: block;
-            background-color: #282828;
+            background-color: var(--accent-color);
             color: var(--text-color);
-            padding: 10px;
+            padding: 12px;
             border-radius: 25px;
             cursor: pointer;
             margin-bottom: 20px;
-            font-size: 0.9rem;
-            transition: background 0.2s;
+            font-size: 0.95rem;
+            font-weight: bold;
+            transition: transform 0.2s;
         }
-        .file-input-label:hover { background-color: #3e3e3e; }
+        .file-input-label:hover { transform: scale(1.02); }
         input[type="file"] { display: none; }
 
         .now-playing { margin: 20px 0; min-height: 50px; }
@@ -68,7 +69,7 @@
             cursor: pointer;
             transition: color 0.2s;
         }
-        .btn:hover { color: var(--spotify-green); }
+        .btn:hover { color: var(--accent-color); }
         .btn-play {
             font-size: 2.5rem;
             background-color: var(--text-color);
@@ -80,41 +81,48 @@
             justify-content: center;
             align-items: center;
         }
-        .btn-play:hover {
-            background-color: var(--spotify-green);
-            color: var(--text-color);
-            transform: scale(1.05);
-        }
+        .btn-play:hover { transform: scale(1.05); }
 
-        /* タブ切り替えのUI */
-        .tabs {
+        /* 💡 プレイリストのヘッダーをフレックスボックス化 */
+        .playlist-header {
             display: flex;
-            justify-content: space-around;
+            justify-content: space-between;
+            align-items: center;
             margin-top: 25px;
+            padding-bottom: 5px;
             border-bottom: 1px solid #282828;
-            padding-bottom: 8px;
         }
-        .tab-btn {
+        .playlist-title {
+            font-size: 0.9rem;
+            color: var(--text-sub);
+        }
+        /* 💡 一括削除ボタンのスタイル（控えめな赤文字） */
+        .btn-clear-all {
             background: none;
             border: none;
-            color: var(--text-sub);
-            font-size: 0.9rem;
+            color: var(--delete-color);
+            font-size: 0.8rem;
             cursor: pointer;
-            padding: 5px 10px;
-            font-weight: bold;
+            opacity: 0.6;
+            transition: opacity 0.2s;
+            padding: 0;
+            display: none; /* 初期状態（空）は非表示 */
         }
-        .tab-btn.active {
-            color: var(--text-color);
-            border-bottom: 2px solid var(--spotify-green);
-        }
+        .btn-clear-all:hover { opacity: 1; }
 
-        /* プレイリスト表示エリア */
         .playlist-container {
             text-align: left;
-            max-height: 180px;
-            overflow-y: auto;
-            padding-top: 10px;
+            height: 180px;         
+            overflow-y: auto;       
+            padding-top: 5px;
+            padding-right: 3px;     
         }
+
+        .playlist-container::-webkit-scrollbar { width: 6px; }
+        .playlist-container::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.05); border-radius: 3px; }
+        .playlist-container::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 3px; }
+        .playlist-container::-webkit-scrollbar-thumb:hover { background: var(--accent-color); }
+
         .playlist-item {
             display: flex;
             justify-content: space-between;
@@ -126,7 +134,7 @@
             margin-bottom: 2px;
         }
         .playlist-item:hover { background-color: #282828; }
-        .playlist-item.active { color: var(--spotify-green); font-weight: bold; }
+        .playlist-item.active { color: var(--accent-color); font-weight: bold; }
         
         .song-info {
             flex-grow: 1;
@@ -135,32 +143,34 @@
             text-overflow: ellipsis;
             cursor: pointer;
         }
-        .fav-icon {
+        .delete-icon {
             cursor: pointer;
-            font-size: 1.1rem;
+            font-size: 1rem;
             padding-left: 10px;
-            transition: transform 0.1s;
+            color: #555;
+            transition: color 0.2s;
         }
-        .fav-icon:hover { transform: scale(1.2); }
-        .empty-msg {
+        .delete-icon:hover { color: var(--delete-color); }
+        
+        .status-msg {
+            font-size: 0.8rem;
             color: var(--text-sub);
-            font-size: 0.85rem;
-            text-align: center;
-            padding: 20px 0;
-            line-height: 1.4;
+            margin-top: 5px;
         }
     </style>
 </head>
 <body>
 
 <div class="player-card">
-    <h2>NMPP</h2>
+    <h2>NMMP</h2>
     
-    <label class="file-input-label" for="audio-picker">🎵 曲を読み込む (フォルダ内全選択)</label>
+    <label class="file-input-label" for="audio-picker">🦉 アプリに曲を追加する</label>
     <input type="file" id="audio-picker" accept="audio/mp3, audio/*" multiple>
 
+    <div id="status-text" class="status-msg"></div>
+
     <div class="now-playing">
-        <div class="track-title" id="current-title">楽曲が選択されていません</div>
+        <div class="track-title" id="current-title">ライブラリが空です</div>
     </div>
 
     <div class="controls">
@@ -169,130 +179,140 @@
         <button class="btn" id="btn-next">⏭</button>
     </div>
 
-    <!-- モード切り替えタブ -->
-    <div class="tabs">
-        <button class="tab-btn active" id="tab-all">すべての曲</button>
-        <button class="tab-btn" id="tab-fav">お気に入り 🦉</button>
+    <!-- 💡 レイアウト変更：タイトルと一括削除を並行に -->
+    <div class="playlist-header">
+        <div class="playlist-title">保存済みのプレイリスト</div>
+        <button class="btn-clear-all" id="btn-clear-all">🗑️ 全て削除</button>
     </div>
-
-    <div class="playlist-container" id="playlist-view">
-        <div class="empty-msg">上のボタンから音楽ファイルを読み込んでください。</div>
-    </div>
+    <div class="playlist-container" id="playlist-view"></div>
 </div>
 
 <script>
-    // データ管理（C++のデータ構造の設計にあたる部分）
     const state = {
-        allFiles: [],       // 読み込まれた全ファイルの生データ（実体）
-        queue: [],          // 現在のモード（すべて/お気に入り）に応じて並び替えられた再生キュー
-        currentIndex: 0,    // queue内の現在位置
-        isPlaying: false,
-        viewMode: 'all',    // 表示モード: 'all' または 'fav'
-        
-        // 【アプローチA】ローカルストレージから「曲名の配列」をデシリアライズしてロード
-        // Pythonの `json.loads()` に相当する処理です
-        favorites: JSON.parse(localStorage.getItem('my_fav_song_names')) || []
+        queue: [],          
+        currentIndex: 0,
+        isPlaying: false
     };
 
     const audioEngine = new Audio();
 
-    // DOM要素
     const picker = document.getElementById('audio-picker');
     const titleView = document.getElementById('current-title');
     const playBtn = document.getElementById('btn-play-toggle');
     const prevBtn = document.getElementById('btn-prev');
     const nextBtn = document.getElementById('btn-next');
     const playlistView = document.getElementById('playlist-view');
-    const tabAll = document.getElementById('tab-all');
-    const tabFav = document.getElementById('tab-fav');
+    const clearAllBtn = document.getElementById('btn-clear-all'); // 💡 追加
+    const statusText = document.getElementById('status-text');
 
-    // --- コールバック / イベント設定 ---
+    const DB_NAME = 'SoundPlayerDB';
+    const STORE_NAME = 'songs';
 
-    picker.addEventListener('change', (e) => {
-        const files = Array.from(e.target.files);
-        if (files.length === 0) return;
+    function initDB() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(DB_NAME, 1);
+            request.onupgradeneeded = (e) => {
+                const db = e.target.result;
+                if (!db.objectStoreNames.contains(STORE_NAME)) {
+                    db.createObjectStore(STORE_NAME, { keyPath: 'name' });
+                }
+            };
+            request.onsuccess = (e) => resolve(e.target.result);
+            request.onerror = (e) => reject(e.target.error);
+        });
+    }
 
-        state.allFiles = files;
-        updateQueue(); // 読み込み時に現在のモードに合わせてキューを構築
+    async function saveSongToDB(file) {
+        const db = await initDB();
+        return new Promise((resolve, reject) => {
+            const transaction = db.transaction([STORE_NAME], 'readwrite');
+            const store = transaction.objectStore(STORE_NAME);
+            const request = store.put({ name: file.name, data: file });
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = (e) => reject(e.target.error);
+        });
+    }
+
+    async function loadSongsFromDB() {
+        const db = await initDB();
+        return new Promise((resolve, reject) => {
+            const transaction = db.transaction([STORE_NAME], 'readonly');
+            const store = transaction.objectStore(STORE_NAME);
+            const request = store.getAll();
+            request.onsuccess = (e) => resolve(e.target.result);
+            request.onerror = (e) => reject(e.target.error);
+        });
+    }
+
+    async function deleteSongFromDB(name) {
+        const db = await initDB();
+        return new Promise((resolve, reject) => {
+            const transaction = db.transaction([STORE_NAME], 'readwrite');
+            const store = transaction.objectStore(STORE_NAME);
+            const request = store.delete(name);
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = (e) => reject(e.target.error);
+        });
+    }
+
+    // 💡 データベースの一括クリア処理 (TRUNCATE)
+    async function clearAllSongsFromDB() {
+        const db = await initDB();
+        return new Promise((resolve, reject) => {
+            const transaction = db.transaction([STORE_NAME], 'readwrite');
+            const store = transaction.objectStore(STORE_NAME);
+            const request = store.clear(); // 全レコード削除
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = (e) => reject(e.target.error);
+        });
+    }
+
+    window.addEventListener('DOMContentLoaded', async () => {
+        statusText.innerText = "ライブラリを読み込み中...";
+        await refreshLibrary();
+        statusText.innerText = "";
+        
         if (state.queue.length > 0) {
-            loadAndPlay(0);
+            setupInitialTrack(0);
         }
     });
 
-    playBtn.addEventListener('click', () => {
-        if (state.queue.length === 0) return;
-        if (state.isPlaying) { audioEngine.pause(); } else { audioEngine.play(); }
-    });
-
-    nextBtn.addEventListener('click', () => playNext());
-    prevBtn.addEventListener('click', () => playPrev());
-    audioEngine.addEventListener('ended', () => playNext());
-    audioEngine.addEventListener('play', () => { state.isPlaying = true; playBtn.innerText = '⏸'; });
-    audioEngine.addEventListener('pause', () => { state.isPlaying = false; playBtn.innerText = '▶'; });
-
-    // タブ切り替えイベント
-    tabAll.addEventListener('click', () => { switchViewMode('all'); });
-    tabFav.addEventListener('click', () => { switchViewMode('fav'); });
-
-
-    // --- ビジネスロジック（C++のメンバ関数的な部分） ---
-
-    // モード（すべて / お気に入り）に応じて再生キューを再構築する
-    function updateQueue() {
-        if (state.viewMode === 'all') {
-            state.queue = [...state.allFiles];
-        } else {
-            // 【重要】読み込まれたファイル名がお気に入りリストに含まれるかフィルター（線形探索）
-            state.queue = state.allFiles.filter(file => state.favorites.includes(file.name));
-        }
+    async function refreshLibrary() {
+        state.queue = await loadSongsFromDB();
         renderPlaylist();
     }
 
-    function switchViewMode(mode) {
-        state.viewMode = mode;
-        if (mode === 'all') {
-            tabAll.classList.add('active');
-            tabFav.classList.remove('active');
-        } else {
-            tabAll.classList.remove('active');
-            tabFav.classList.add('active');
-        }
-        updateQueue();
-    }
+    picker.addEventListener('change', async (e) => {
+        const files = Array.from(e.target.files);
+        if (files.length === 0) return;
 
-    // お気に入りのトポロジー（追加・削除とシリアライズ）
-    function toggleFavorite(filename) {
-        const index = state.favorites.indexOf(filename);
-        if (index > -1) {
-            state.favorites.splice(index, 1); // すでに存在すれば削除（std::vector::erase）
-        } else {
-            state.favorites.push(filename);   // なければ追加（push_back）
-        }
+        statusText.innerText = "曲をアプリに保存中...";
+        await Promise.all(files.map(file => saveSongToDB(file)));
+        await refreshLibrary();
+        statusText.innerText = "保存が完了しました！";
+        setTimeout(() => statusText.innerText = "", 3000);
+    });
 
-        // 【アプローチAの核心】配列をJSON文字列にして永続化保存（シリアライズ）
-        // Pythonの `json.dumps()` やC++のファイル出力に相当
-        localStorage.setItem('my_fav_song_names', JSON.stringify(state.favorites));
-
-        // 表示を更新（お気に入りモード時はリストから消えるようにする）
-        updateQueue();
-        updatePlaylistHighlight();
-    }
-
-    // 音楽のロードと再生
     function loadAndPlay(index) {
         if (index < 0 || index >= state.queue.length) return;
         state.currentIndex = index;
 
-        const file = state.queue[index];
-        titleView.innerText = file.name.replace(/\.[^/.]+$/, "");
+        const songRecord = state.queue[index];
+        titleView.innerText = songRecord.name.replace(/\.[^/.]+$/, "");
 
         if (audioEngine.src) { URL.revokeObjectURL(audioEngine.src); }
-        audioEngine.src = URL.createObjectURL(file);
+        audioEngine.src = URL.createObjectURL(songRecord.data);
         
         audioEngine.play().catch(err => console.log("再生エラー:", err));
-        
         updatePlaylistHighlight();
-        setupMediaSession(file.name.replace(/\.[^/.]+$/, ""));
+        setupMediaSession(songRecord.name.replace(/\.[^/.]+$/, ""));
+    }
+
+    function setupInitialTrack(index) {
+        state.currentIndex = index;
+        const songRecord = state.queue[index];
+        titleView.innerText = songRecord.name.replace(/\.[^/.]+$/, "");
+        updatePlaylistHighlight();
     }
 
     function playNext() {
@@ -309,45 +329,83 @@
         loadAndPlay(prevIdx);
     }
 
-    // --- UI レンダリング（画面描画） ---
+    playBtn.addEventListener('click', () => {
+        if (state.queue.length === 0) return;
+        if (state.isPlaying) { audioEngine.pause(); } else { audioEngine.play(); }
+    });
+
+    nextBtn.addEventListener('click', () => playNext());
+    prevBtn.addEventListener('click', () => playPrev());
+    audioEngine.addEventListener('ended', () => playNext());
+    audioEngine.addEventListener('play', () => { state.isPlaying = true; playBtn.innerText = '⏸'; });
+    audioEngine.addEventListener('pause', () => { state.isPlaying = false; playBtn.innerText = '▶'; });
+
+    // 💡 一括削除ボタンのクリックイベント
+    clearAllBtn.addEventListener('click', async () => {
+        if (state.queue.length === 0) return;
+
+        if (confirm("アプリ内のすべての曲を一括削除しますか？\nこの操作は取り消せません。")) {
+            statusText.innerText = "ライブラリをクリア中...";
+
+            // 1. 再生中のオーディオを安全に停止し、Object URLのメモリを解放
+            audioEngine.pause();
+            if (audioEngine.src) {
+                URL.revokeObjectURL(audioEngine.src);
+                audioEngine.src = "";
+            }
+
+            // 2. 状態管理（State）の初期化
+            state.currentIndex = 0;
+            state.isPlaying = false;
+
+            // 3. データベースのクリアを実行
+            await clearAllSongsFromDB();
+
+            // 4. UIの更新
+            await refreshLibrary();
+            
+            statusText.innerText = "すべての曲を削除しました。";
+            setTimeout(() => statusText.innerText = "", 3000);
+        }
+    });
 
     function renderPlaylist() {
         playlistView.innerHTML = '';
 
-        if (state.allFiles.length === 0) {
-            playlistView.innerHTML = '<div class="empty-msg">音楽ファイルを読み込んでください。</div>';
+        if (state.queue.length === 0) {
+            playlistView.innerHTML = '<div class="status-msg" style="text-align:center; padding:20px;">曲が保存されていません。<br>上のボタンからインポートしてください。</div>';
+            titleView.innerText = "ライブラリが空です";
+            clearAllBtn.style.display = 'none'; // 💡 曲がないときはボタンを隠す
             return;
         }
 
-        if (state.queue.length === 0 && state.viewMode === 'fav') {
-            playlistView.innerHTML = '<div class="empty-msg">このフォルダ内にお気に入りに登録された曲はありません。<br>「すべての曲」タブから🦉を押してください。</div>';
-            return;
-        }
+        clearAllBtn.style.display = 'block'; // 💡 曲があるときだけ表示
 
-        state.queue.forEach((file, index) => {
+        state.queue.forEach((song, index) => {
             const item = document.createElement('div');
             item.className = 'playlist-item';
             
-            // 曲名部分
             const info = document.createElement('div');
             info.className = 'song-info';
-            info.innerText = `${index + 1}. ${file.name.replace(/\.[^/.]+$/, "")}`;
+            info.innerText = `${index + 1}. ${song.name.replace(/\.[^/.]+$/, "")}`;
             info.addEventListener('click', () => loadAndPlay(index));
 
-            // ハートマークボタン
-            const favIcon = document.createElement('span');
-            favIcon.className = 'fav-icon';
-            const isFav = state.favorites.includes(file.name);
-            favIcon.innerText = isFav ? '🦉' : '🤍';
-            
-            // ハートをクリックした時の処理
-            favIcon.addEventListener('click', (e) => {
-                e.stopPropagation(); // 親要素のクリックイベント（再生）を発火させない防護策
-                toggleFavorite(file.name);
+            const deleteIcon = document.createElement('span');
+            deleteIcon.className = 'delete-icon';
+            deleteIcon.innerText = '🗑️';
+            deleteIcon.addEventListener('click', async (e) => {
+                e.stopPropagation(); 
+                if (confirm(`「${song.name}」をアプリから削除しますか？`)) {
+                    await deleteSongFromDB(song.name);
+                    await refreshLibrary();
+                    if (state.currentIndex >= state.queue.length && state.queue.length > 0) {
+                        setupInitialTrack(0);
+                    }
+                }
             });
 
             item.appendChild(info);
-            item.appendChild(favIcon);
+            item.appendChild(deleteIcon);
             playlistView.appendChild(item);
         });
         updatePlaylistHighlight();
@@ -355,11 +413,10 @@
 
     function updatePlaylistHighlight() {
         const items = playlistView.getElementsByClassName('playlist-item');
-        if (items.length === 0) return;
-        
         for (let i = 0; i < items.length; i++) {
             if (i === state.currentIndex && state.queue.length > 0) {
                 items[i].classList.add('active');
+                items[i].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             } else {
                 items[i].classList.remove('active');
             }
@@ -370,8 +427,8 @@
         if ('mediaSession' in navigator) {
             navigator.mediaSession.metadata = new MediaMetadata({
                 title: title,
-                artist: 'NMPP',
-                album: 'Local Storage'
+                artist: 'NMMP',
+                album: 'IndexedDB Storage'
             });
             navigator.mediaSession.setActionHandler('play', () => audioEngine.play());
             navigator.mediaSession.setActionHandler('pause', () => audioEngine.pause());
