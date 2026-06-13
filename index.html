@@ -3,12 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NMPP</title>
+    <title>NMPP - Pro</title>
     <style>
         :root {
             --bg-color: #121212;
             --card-color: #1e1e1e;
-            --accent-color: #1db954; /* 鮮やかなグリーン */
+            --accent-color: #e91e63; /* お気に入り用のピンク・レッド */
+            --spotify-green: #1db954;
             --text-color: #ffffff;
             --text-sub: #b3b3b3;
         }
@@ -33,9 +34,8 @@
             max-width: 360px;
             text-align: center;
         }
-        h2 { margin-top: 0; font-size: 1.4rem; }
+        h2 { margin-top: 0; font-size: 1.4rem; color: var(--text-color); }
         
-        /* ファイル選択ボタンのカスタム */
         .file-input-label {
             display: block;
             background-color: #282828;
@@ -50,14 +50,9 @@
         .file-input-label:hover { background-color: #3e3e3e; }
         input[type="file"] { display: none; }
 
-        /* 再生中情報の表示エリア */
-        .now-playing {
-            margin: 20px 0;
-            min-height: 50px;
-        }
+        .now-playing { margin: 20px 0; min-height: 50px; }
         .track-title { font-weight: bold; font-size: 1.1rem; margin-bottom: 5px; word-break: break-all; }
         
-        /* コントロール系 */
         .controls {
             display: flex;
             justify-content: center;
@@ -73,7 +68,7 @@
             cursor: pointer;
             transition: color 0.2s;
         }
-        .btn:hover { color: var(--accent-color); }
+        .btn:hover { color: var(--spotify-green); }
         .btn-play {
             font-size: 2.5rem;
             background-color: var(--text-color);
@@ -86,178 +81,284 @@
             align-items: center;
         }
         .btn-play:hover {
-            background-color: var(--accent-color);
+            background-color: var(--spotify-green);
             color: var(--text-color);
             transform: scale(1.05);
         }
 
+        /* タブ切り替えのUI */
+        .tabs {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 25px;
+            border-bottom: 1px solid #282828;
+            padding-bottom: 8px;
+        }
+        .tab-btn {
+            background: none;
+            border: none;
+            color: var(--text-sub);
+            font-size: 0.9rem;
+            cursor: pointer;
+            padding: 5px 10px;
+            font-weight: bold;
+        }
+        .tab-btn.active {
+            color: var(--text-color);
+            border-bottom: 2px solid var(--spotify-green);
+        }
+
         /* プレイリスト表示エリア */
         .playlist-container {
-            margin-top: 25px;
             text-align: left;
             max-height: 180px;
             overflow-y: auto;
-            border-top: 1px solid #282828;
-            padding-top: 15px;
+            padding-top: 10px;
         }
         .playlist-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             padding: 8px 10px;
             font-size: 0.9rem;
             color: var(--text-sub);
-            cursor: pointer;
             border-radius: 5px;
+            margin-bottom: 2px;
+        }
+        .playlist-item:hover { background-color: #282828; }
+        .playlist-item.active { color: var(--spotify-green); font-weight: bold; }
+        
+        .song-info {
+            flex-grow: 1;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            cursor: pointer;
         }
-        .playlist-item:hover { background-color: #282828; color: var(--text-color); }
-        .playlist-item.active { color: var(--accent-color); font-weight: bold; }
+        .fav-icon {
+            cursor: pointer;
+            font-size: 1.1rem;
+            padding-left: 10px;
+            transition: transform 0.1s;
+        }
+        .fav-icon:hover { transform: scale(1.2); }
+        .empty-msg {
+            color: var(--text-sub);
+            font-size: 0.85rem;
+            text-align: center;
+            padding: 20px 0;
+            line-height: 1.4;
+        }
     </style>
 </head>
 <body>
 
 <div class="player-card">
-    <h2>My Sound Player</h2>
+    <h2>NMPP</h2>
     
-    <!-- MP3を複数選択するためのボタン -->
-    <label class="file-input-label" for="audio-picker">🎵 曲を読み込む (複数選択可)</label>
+    <label class="file-input-label" for="audio-picker">🎵 曲を読み込む (フォルダ内全選択)</label>
     <input type="file" id="audio-picker" accept="audio/mp3, audio/*" multiple>
 
     <div class="now-playing">
         <div class="track-title" id="current-title">楽曲が選択されていません</div>
     </div>
 
-    <!-- プレイヤーコントロール（文字アイコンで代用） -->
     <div class="controls">
         <button class="btn" id="btn-prev">⏮</button>
         <button class="btn btn-play" id="btn-play-toggle">▶</button>
         <button class="btn" id="btn-next">⏭</button>
     </div>
 
-    <!-- プレイリスト表示 -->
-    <div class="playlist-container" id="playlist-view"></div>
+    <!-- モード切り替えタブ -->
+    <div class="tabs">
+        <button class="tab-btn active" id="tab-all">すべての曲</button>
+        <button class="tab-btn" id="tab-fav">お気に入り 🦉</button>
+    </div>
+
+    <div class="playlist-container" id="playlist-view">
+        <div class="empty-msg">上のボタンから音楽ファイルを読み込んでください。</div>
+    </div>
 </div>
 
 <script>
-    // 状態管理オブジェクト（C++のクラスメンバ変数のようなもの）
+    // データ管理（C++のデータ構造の設計にあたる部分）
     const state = {
-        playlist: [],       // 選択されたファイルの配列
-        currentIndex: 0,    // 現在再生中のインデックス
-        isPlaying: false    // 再生フラグ
+        allFiles: [],       // 読み込まれた全ファイルの生データ（実体）
+        queue: [],          // 現在のモード（すべて/お気に入り）に応じて並び替えられた再生キュー
+        currentIndex: 0,    // queue内の現在位置
+        isPlaying: false,
+        viewMode: 'all',    // 表示モード: 'all' または 'fav'
+        
+        // 【アプローチA】ローカルストレージから「曲名の配列」をデシリアライズしてロード
+        // Pythonの `json.loads()` に相当する処理です
+        favorites: JSON.parse(localStorage.getItem('my_fav_song_names')) || []
     };
 
-    // 音声再生の実体（ブラウザ標準のAudioエンジン）
     const audioEngine = new Audio();
 
-    // DOM要素の取得
+    // DOM要素
     const picker = document.getElementById('audio-picker');
     const titleView = document.getElementById('current-title');
     const playBtn = document.getElementById('btn-play-toggle');
     const prevBtn = document.getElementById('btn-prev');
     const nextBtn = document.getElementById('btn-next');
     const playlistView = document.getElementById('playlist-view');
+    const tabAll = document.getElementById('tab-all');
+    const tabFav = document.getElementById('tab-fav');
 
-    // --- イベントリスナー（割り込み処理・コールバックの設定） ---
+    // --- コールバック / イベント設定 ---
 
-    // 1. ファイルが選択されたとき
     picker.addEventListener('change', (e) => {
         const files = Array.from(e.target.files);
         if (files.length === 0) return;
 
-        state.playlist = files;
-        state.currentIndex = 0;
-        
-        renderPlaylist();
-        loadAndPlay(state.currentIndex);
-    });
-
-    // 2. 再生・一時停止ボタン
-    playBtn.addEventListener('click', () => {
-        if (state.playlist.length === 0) return;
-        if (state.isPlaying) {
-            audioEngine.pause();
-        } else {
-            audioEngine.play();
+        state.allFiles = files;
+        updateQueue(); // 読み込み時に現在のモードに合わせてキューを構築
+        if (state.queue.length > 0) {
+            loadAndPlay(0);
         }
     });
 
-    // 3. 次の曲へ / 前の曲へ
+    playBtn.addEventListener('click', () => {
+        if (state.queue.length === 0) return;
+        if (state.isPlaying) { audioEngine.pause(); } else { audioEngine.play(); }
+    });
+
     nextBtn.addEventListener('click', () => playNext());
     prevBtn.addEventListener('click', () => playPrev());
-
-    // 4. 曲が最後まで再生し終わったとき（自動スキップ）
     audioEngine.addEventListener('ended', () => playNext());
+    audioEngine.addEventListener('play', () => { state.isPlaying = true; playBtn.innerText = '⏸'; });
+    audioEngine.addEventListener('pause', () => { state.isPlaying = false; playBtn.innerText = '▶'; });
 
-    // 5. オーディオエンジンの状態変化をボタン表記に同期
-    audioEngine.addEventListener('play', () => {
-        state.isPlaying = true;
-        playBtn.innerText = '⏸'; // 一時停止アイコンに
-    });
-    audioEngine.addEventListener('pause', () => {
-        state.isPlaying = false;
-        playBtn.innerText = '▶'; // 再生アイコンに
-    });
+    // タブ切り替えイベント
+    tabAll.addEventListener('click', () => { switchViewMode('all'); });
+    tabFav.addEventListener('click', () => { switchViewMode('fav'); });
 
 
-    // --- 再生ロジック関数群 ---
+    // --- ビジネスロジック（C++のメンバ関数的な部分） ---
 
-    // 指定インデックスの曲を読み込んで再生
+    // モード（すべて / お気に入り）に応じて再生キューを再構築する
+    function updateQueue() {
+        if (state.viewMode === 'all') {
+            state.queue = [...state.allFiles];
+        } else {
+            // 【重要】読み込まれたファイル名がお気に入りリストに含まれるかフィルター（線形探索）
+            state.queue = state.allFiles.filter(file => state.favorites.includes(file.name));
+        }
+        renderPlaylist();
+    }
+
+    function switchViewMode(mode) {
+        state.viewMode = mode;
+        if (mode === 'all') {
+            tabAll.classList.add('active');
+            tabFav.classList.remove('active');
+        } else {
+            tabAll.classList.remove('active');
+            tabFav.classList.add('active');
+        }
+        updateQueue();
+    }
+
+    // お気に入りのトポロジー（追加・削除とシリアライズ）
+    function toggleFavorite(filename) {
+        const index = state.favorites.indexOf(filename);
+        if (index > -1) {
+            state.favorites.splice(index, 1); // すでに存在すれば削除（std::vector::erase）
+        } else {
+            state.favorites.push(filename);   // なければ追加（push_back）
+        }
+
+        // 【アプローチAの核心】配列をJSON文字列にして永続化保存（シリアライズ）
+        // Pythonの `json.dumps()` やC++のファイル出力に相当
+        localStorage.setItem('my_fav_song_names', JSON.stringify(state.favorites));
+
+        // 表示を更新（お気に入りモード時はリストから消えるようにする）
+        updateQueue();
+        updatePlaylistHighlight();
+    }
+
+    // 音楽のロードと再生
     function loadAndPlay(index) {
-        if (index < 0 || index >= state.playlist.length) return;
+        if (index < 0 || index >= state.queue.length) return;
         state.currentIndex = index;
 
-        const file = state.playlist[index];
-        titleView.innerText = file.name.replace(/\.[^/.]+$/, ""); // 拡張子を消して表示
+        const file = state.queue[index];
+        titleView.innerText = file.name.replace(/\.[^/.]+$/, "");
 
-        // 【最重要】ローカルのファイルをブラウザが読める一時的な仮想URLに変換（メモリ展開）
-        if (audioEngine.src) {
-            URL.revokeObjectURL(audioEngine.src); // メモリリーク防止（C++のdeleteに近い処理）
-        }
+        if (audioEngine.src) { URL.revokeObjectURL(audioEngine.src); }
         audioEngine.src = URL.createObjectURL(file);
         
         audioEngine.play().catch(err => console.log("再生エラー:", err));
         
         updatePlaylistHighlight();
-        setupMediaSession(file.name.replace(/\.[^/.]+$/, "")); // iOS用のロック画面連携
+        setupMediaSession(file.name.replace(/\.[^/.]+$/, ""));
     }
 
     function playNext() {
-        if (state.currentIndex + 1 < state.playlist.length) {
-            loadAndPlay(state.currentIndex + 1);
-        } else {
-            loadAndPlay(0); // 最後の曲なら最初に戻る（ループ）
-        }
+        if (state.queue.length === 0) return;
+        let nextIdx = state.currentIndex + 1;
+        if (nextIdx >= state.queue.length) nextIdx = 0;
+        loadAndPlay(nextIdx);
     }
 
     function playPrev() {
-        if (state.currentIndex - 1 >= 0) {
-            loadAndPlay(state.currentIndex - 1);
-        } else {
-            loadAndPlay(state.playlist.length - 1); // 最初なら最後の曲へ
-        }
+        if (state.queue.length === 0) return;
+        let prevIdx = state.currentIndex - 1;
+        if (prevIdx < 0) prevIdx = state.queue.length - 1;
+        loadAndPlay(prevIdx);
     }
 
-    // --- 画面更新関数群 ---
+    // --- UI レンダリング（画面描画） ---
 
-    // プレイリストのテキスト一覧を生成
     function renderPlaylist() {
         playlistView.innerHTML = '';
-        state.playlist.forEach((file, index) => {
+
+        if (state.allFiles.length === 0) {
+            playlistView.innerHTML = '<div class="empty-msg">音楽ファイルを読み込んでください。</div>';
+            return;
+        }
+
+        if (state.queue.length === 0 && state.viewMode === 'fav') {
+            playlistView.innerHTML = '<div class="empty-msg">このフォルダ内にお気に入りに登録された曲はありません。<br>「すべての曲」タブから🦉を押してください。</div>';
+            return;
+        }
+
+        state.queue.forEach((file, index) => {
             const item = document.createElement('div');
             item.className = 'playlist-item';
-            item.innerText = `${index + 1}. ${file.name.replace(/\.[^/.]+$/, "")}`;
             
-            // リスト内の曲を直接タップして再生できるようにする
-            item.addEventListener('click', () => loadAndPlay(index));
+            // 曲名部分
+            const info = document.createElement('div');
+            info.className = 'song-info';
+            info.innerText = `${index + 1}. ${file.name.replace(/\.[^/.]+$/, "")}`;
+            info.addEventListener('click', () => loadAndPlay(index));
+
+            // ハートマークボタン
+            const favIcon = document.createElement('span');
+            favIcon.className = 'fav-icon';
+            const isFav = state.favorites.includes(file.name);
+            favIcon.innerText = isFav ? '🦉' : '🤍';
+            
+            // ハートをクリックした時の処理
+            favIcon.addEventListener('click', (e) => {
+                e.stopPropagation(); // 親要素のクリックイベント（再生）を発火させない防護策
+                toggleFavorite(file.name);
+            });
+
+            item.appendChild(info);
+            item.appendChild(favIcon);
             playlistView.appendChild(item);
         });
+        updatePlaylistHighlight();
     }
 
-    // 現在再生中の曲をハイライト（緑色に）する
     function updatePlaylistHighlight() {
-        const items = playlistView.children;
+        const items = playlistView.getElementsByClassName('playlist-item');
+        if (items.length === 0) return;
+        
         for (let i = 0; i < items.length; i++) {
-            if (i === state.currentIndex) {
+            if (i === state.currentIndex && state.queue.length > 0) {
                 items[i].classList.add('active');
             } else {
                 items[i].classList.remove('active');
@@ -265,16 +366,13 @@
         }
     }
 
-    // 【iOS対応】iPhoneのロック画面やコントロールセンターに曲名を出して操作可能にする
     function setupMediaSession(title) {
         if ('mediaSession' in navigator) {
             navigator.mediaSession.metadata = new MediaMetadata({
                 title: title,
-                artist: 'NPMM',
+                artist: 'NMPP',
                 album: 'Local Storage'
             });
-            
-            // ロック画面のボタンとアプリの関数を紐付ける
             navigator.mediaSession.setActionHandler('play', () => audioEngine.play());
             navigator.mediaSession.setActionHandler('pause', () => audioEngine.pause());
             navigator.mediaSession.setActionHandler('previoustrack', () => playPrev());
@@ -285,4 +383,3 @@
 
 </body>
 </html>
-
