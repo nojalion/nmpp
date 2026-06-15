@@ -80,8 +80,20 @@
             display: flex;
             justify-content: center;
             align-items: center;
+            
+            /* 💡 位置調整：右に5px寄せつつ、下に4pxの余白を作って文字を2px上 */
+            padding-left: 12px;
+            padding-bottom: 4px;
+            box-sizing: border-box;
         }
         .btn-play:hover { transform: scale(1.05); }
+
+        /* 💡 追加：一時停止マーク（⏸）のときは左右対称なので、ズレをゼロに戻す */
+        .btn-play.playing {
+            padding-left: 8px;
+            padding-bottom: 8px;
+        }
+
 
         /* 💡 プレイリストのヘッダーをフレックスボックス化 */
         .playlist-header {
@@ -354,9 +366,19 @@
     nextBtn.addEventListener('click', () => playNext());
     prevBtn.addEventListener('click', () => playPrev());
     audioEngine.addEventListener('ended', () => playNext());
-    audioEngine.addEventListener('play', () => { state.isPlaying = true; playBtn.innerText = '⏸'; });
-    audioEngine.addEventListener('pause', () => { state.isPlaying = false; playBtn.innerText = '▶'; });
+    // 💡 修正：再生が始まったらクラスを追加して、中央揃えに戻す
+    audioEngine.addEventListener('play', () => { 
+        state.isPlaying = true; 
+        playBtn.innerText = '⏸'; 
+        playBtn.classList.add('playing'); // ← これを追加
+    });
 
+    // 💡 修正：一時停止したらクラスを外して、また少し右に寄せる
+    audioEngine.addEventListener('pause', () => { 
+        state.isPlaying = false; 
+        playBtn.innerText = '▶'; 
+        playBtn.classList.remove('playing'); // ← これを追加
+    });
     // 💡 一括削除ボタンのクリックイベント
     clearAllBtn.addEventListener('click', async () => {
         if (state.queue.length === 0) return;
