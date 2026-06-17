@@ -284,7 +284,6 @@
         }
     });
 
-// 💡 修正：iOSのバックグラウンド制限を回避するために、再生が始まった後に実行するように変更
     function loadAndPlay(index) {
         if (index < 0 || index >= state.queue.length) return;
         state.currentIndex = index;
@@ -296,10 +295,12 @@
         
         audioEngine.play()
             .then(() => {
-                // 💡 変更：音が鳴り始めた（iOSに権限が認められた）直後に、ロック画面を更新する
                 setupMediaSession(songRecord.name.replace(/\.[^/.]+$/, ""));
             })
-            .catch(err => console.log("再生エラー:", err));
+            .catch(err => {
+                console.log("再生エラー:", err);
+                statusText.innerText = "再生エラー: " + err.name + " / " + err.message; // ここを追加
+            });
             
         updatePlaylistHighlight();
     }
