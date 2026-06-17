@@ -70,7 +70,6 @@
             transition: color 0.2s;
         }
         .btn:hover { color: var(--accent-color); }
-        
         .btn-play {
             font-size: 2.5rem;
             background-color: var(--text-color);
@@ -78,22 +77,25 @@
             width: 60px;
             height: 60px;
             border-radius: 50%;
-            border: none;
             display: flex;
             justify-content: center;
             align-items: center;
-            cursor: pointer;
-            transition: transform 0.2s;
+            
+            /* 💡 位置調整：右に5px寄せつつ、下に4pxの余白を作って文字を2px上 */
             padding-left: 12px;
-            padding-bottom: 4px; 
+            padding-bottom: 4px;
             box-sizing: border-box;
         }
         .btn-play:hover { transform: scale(1.05); }
-        .btn-play.playing {
-            padding-left: 8px; 
-            padding-bottom: 8px; 
-            }
 
+        /* 💡 追加：一時停止マーク（⏸）のときは左右対称なので、ズレをゼロに戻す */
+        .btn-play.playing {
+            padding-left: 8px;
+            padding-bottom: 8px;
+        }
+
+
+        /* 💡 プレイリストのヘッダーをフレックスボックス化 */
         .playlist-header {
             display: flex;
             justify-content: space-between;
@@ -102,33 +104,71 @@
             padding-bottom: 5px;
             border-bottom: 1px solid #282828;
         }
-        .playlist-title { font-size: 0.9rem; color: var(--text-sub); }
+        .playlist-title {
+            font-size: 0.9rem;
+            color: var(--text-sub);
+        }
+        /* 💡 一括削除ボタンのスタイル（控えめな赤文字） */
         .btn-clear-all {
-            background: none; border: none; color: var(--delete-color); font-size: 0.8rem;
-            cursor: pointer; opacity: 0.6; transition: opacity 0.2s; padding: 0; display: none;
+            background: none;
+            border: none;
+            color: var(--delete-color);
+            font-size: 0.8rem;
+            cursor: pointer;
+            opacity: 0.6;
+            transition: opacity 0.2s;
+            padding: 0;
+            display: none; /* 初期状態（空）は非表示 */
         }
         .btn-clear-all:hover { opacity: 1; }
 
         .playlist-container {
-            text-align: left; height: 180px; overflow-y: auto; padding-top: 5px; padding-right: 3px;     
+            text-align: left;
+            height: 180px;         
+            overflow-y: auto;       
+            padding-top: 5px;
+            padding-right: 3px;     
         }
+
         .playlist-container::-webkit-scrollbar { width: 6px; }
         .playlist-container::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.05); border-radius: 3px; }
         .playlist-container::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 3px; }
         .playlist-container::-webkit-scrollbar-thumb:hover { background: var(--accent-color); }
 
         .playlist-item {
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 8px 10px; font-size: 0.9rem; color: var(--text-sub); border-radius: 5px; margin-bottom: 2px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 10px;
+            font-size: 0.9rem;
+            color: var(--text-sub);
+            border-radius: 5px;
+            margin-bottom: 2px;
         }
         .playlist-item:hover { background-color: #282828; }
         .playlist-item.active { color: var(--accent-color); font-weight: bold; }
         
-        .song-info { flex-grow: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
-        .delete-icon { cursor: pointer; font-size: 1rem; padding-left: 10px; color: #555; transition: color 0.2s; }
+        .song-info {
+            flex-grow: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            cursor: pointer;
+        }
+        .delete-icon {
+            cursor: pointer;
+            font-size: 1rem;
+            padding-left: 10px;
+            color: #555;
+            transition: color 0.2s;
+        }
         .delete-icon:hover { color: var(--delete-color); }
         
-        .status-msg { font-size: 0.8rem; color: var(--text-sub); margin-top: 5px; }
+        .status-msg {
+            font-size: 0.8rem;
+            color: var(--text-sub);
+            margin-top: 5px;
+        }
     </style>
 </head>
 <body>
@@ -151,6 +191,7 @@
         <button class="btn" id="btn-next">⏭</button>
     </div>
 
+    <!-- 💡 レイアウト変更：タイトルと一括削除を並行に -->
     <div class="playlist-header">
         <div class="playlist-title">保存済みのプレイリスト</div>
         <button class="btn-clear-all" id="btn-clear-all">🗑️ 全て削除</button>
@@ -165,7 +206,6 @@
         isPlaying: false
     };
 
-    // 💡 シンプルに1つのプレイヤーに戻します
     const audioEngine = new Audio();
 
     const picker = document.getElementById('audio-picker');
@@ -174,7 +214,7 @@
     const prevBtn = document.getElementById('btn-prev');
     const nextBtn = document.getElementById('btn-next');
     const playlistView = document.getElementById('playlist-view');
-    const clearAllBtn = document.getElementById('btn-clear-all');
+    const clearAllBtn = document.getElementById('btn-clear-all'); // 💡 追加
     const statusText = document.getElementById('status-text');
 
     const DB_NAME = 'SoundPlayerDB';
@@ -227,29 +267,16 @@
         });
     }
 
+    // 💡 データベースの一括クリア処理 (TRUNCATE)
     async function clearAllSongsFromDB() {
         const db = await initDB();
         return new Promise((resolve, reject) => {
             const transaction = db.transaction([STORE_NAME], 'readwrite');
             const store = transaction.objectStore(STORE_NAME);
-            const request = store.clear();
+            const request = store.clear(); // 全レコード削除
             transaction.oncomplete = () => resolve();
             transaction.onerror = (e) => reject(e.target.error);
         });
-    }
-
-    // 💡 すべてのBlob URLを一元管理する配列（メモリ上に永続化）
-    let generatedUrls = [];
-
-    // 💡 アプリ起動時やインポート時に、全曲分のURLをあらかじめ生成する関数
-    function revokeAllUrls() {
-        generatedUrls.forEach(url => URL.revokeObjectURL(url));
-        generatedUrls = [];
-    }
-
-    function prepareAllTrackUrls() {
-        revokeAllUrls(); // 古いURLがあれば一回綺麗に掃除
-        generatedUrls = state.queue.map(song => URL.createObjectURL(song.data));
     }
 
     window.addEventListener('DOMContentLoaded', async () => {
@@ -264,7 +291,6 @@
 
     async function refreshLibrary() {
         state.queue = await loadSongsFromDB();
-        prepareAllTrackUrls(); // 💡 ライブラリが更新されたら、その瞬間に全曲分のURLを作る！
         renderPlaylist();
     }
 
@@ -272,15 +298,18 @@
         const files = Array.from(e.target.files);
         if (files.length === 0) return;
 
+        // インポート前のライブラリが空だったかどうかを記憶しておく
         const wasEmpty = state.queue.length === 0;
+
         statusText.innerText = "曲をアプリに保存中...";
         await Promise.all(files.map(file => saveSongToDB(file)));
         await refreshLibrary();
         statusText.innerText = "保存が完了しました！";
         setTimeout(() => statusText.innerText = "", 3000);
 
+        // 💡 変更点：空の状態から新しく曲が追加された場合、自動で1曲目をセット
         if (wasEmpty && state.queue.length > 0) {
-            setupInitialTrack(0);
+            setupInitialTrack(0); // 1曲目を選択状態（待機状態）にする
         }
     });
 
@@ -291,28 +320,25 @@
         const songRecord = state.queue[index];
         titleView.innerText = songRecord.name.replace(/\.[^/.]+$/, "");
 
-        audioEngine.src = generatedUrls[index];
+        if (audioEngine.src) { URL.revokeObjectURL(audioEngine.src); }
+        audioEngine.src = URL.createObjectURL(songRecord.data);
         
-        audioEngine.play()
-            .then(() => {
-                setupMediaSession(songRecord.name.replace(/\.[^/.]+$/, ""));
-            })
-            .catch(err => {
-                debugLog("再生エラー: " + err.name + " / " + err.message);
-            });
-            
+        audioEngine.play().catch(err => console.log("再生エラー:", err));
         updatePlaylistHighlight();
+        setupMediaSession(songRecord.name.replace(/\.[^/.]+$/, ""));
     }
 
-// 💡 修正：初期装填時
+// 💡 修正前：文字を変えるだけだった関数を、実体も読み込むように修正
     function setupInitialTrack(index) {
-        if (index < 0 || index >= state.queue.length) return;
+        if (index < 0 || index >= state.queue.length) return; // セーフティ
         state.currentIndex = index;
         
         const songRecord = state.queue[index];
         titleView.innerText = songRecord.name.replace(/\.[^/.]+$/, "");
         
-        audioEngine.src = generatedUrls[index];
+        // 💡 追加：再生はせず、音楽の実体（Object URL）だけをプレイヤーに装填する
+        if (audioEngine.src) { URL.revokeObjectURL(audioEngine.src); }
+        audioEngine.src = URL.createObjectURL(songRecord.data);
         
         updatePlaylistHighlight();
         setupMediaSession(songRecord.name.replace(/\.[^/.]+$/, ""));
@@ -334,41 +360,49 @@
 
     playBtn.addEventListener('click', () => {
         if (state.queue.length === 0) return;
-        if (state.isPlaying) { audioEngine.pause(); } else { audioEngine.play().catch(() => {}); }
+        if (state.isPlaying) { audioEngine.pause(); } else { audioEngine.play(); }
     });
 
     nextBtn.addEventListener('click', () => playNext());
     prevBtn.addEventListener('click', () => playPrev());
-    
-    audioEngine.addEventListener('ended', () => {
-        if (state.queue.length === 0) return;
-        let nextIdx = state.currentIndex + 1;
-        if (nextIdx >= state.queue.length) nextIdx = 0;
-        loadAndPlay(nextIdx);
-    });
-        
+    audioEngine.addEventListener('ended', () => playNext());
+    // 💡 修正：再生が始まったらクラスを追加して、中央揃えに戻す
     audioEngine.addEventListener('play', () => { 
         state.isPlaying = true; 
         playBtn.innerText = '⏸'; 
-        playBtn.classList.add('playing');
+        playBtn.classList.add('playing'); // ← これを追加
     });
+
+    // 💡 修正：一時停止したらクラスを外して、また少し右に寄せる
     audioEngine.addEventListener('pause', () => { 
         state.isPlaying = false; 
         playBtn.innerText = '▶'; 
-        playBtn.classList.remove('playing');
+        playBtn.classList.remove('playing'); // ← これを追加
     });
-
+    // 💡 一括削除ボタンのクリックイベント
     clearAllBtn.addEventListener('click', async () => {
         if (state.queue.length === 0) return;
-        if (confirm("アプリ内のすべての曲を一括削除しますか？\nこの操作は取り消せません。")) {
+
+        if (confirm("このアプリ内のすべての曲を一括削除しますか？\nこの操作は取り消せません。")) {
             statusText.innerText = "ライブラリをクリア中...";
+
+            // 1. 再生中のオーディオを安全に停止し、Object URLのメモリを解放
             audioEngine.pause();
-            audioEngine.src = "";
-            revokeAllUrls(); // メモリ解放
+            if (audioEngine.src) {
+                URL.revokeObjectURL(audioEngine.src);
+                audioEngine.src = "";
+            }
+
+            // 2. 状態管理（State）の初期化
             state.currentIndex = 0;
             state.isPlaying = false;
+
+            // 3. データベースのクリアを実行
             await clearAllSongsFromDB();
+
+            // 4. UIの更新
             await refreshLibrary();
+            
             statusText.innerText = "すべての曲を削除しました。";
             setTimeout(() => statusText.innerText = "", 3000);
         }
@@ -376,13 +410,15 @@
 
     function renderPlaylist() {
         playlistView.innerHTML = '';
+
         if (state.queue.length === 0) {
             playlistView.innerHTML = '<div class="status-msg" style="text-align:center; padding:20px;">曲が保存されていません。<br>上のボタンからインポートしてください。</div>';
             titleView.innerText = "- No Tracks -";
             clearAllBtn.style.display = 'none'; // 💡 曲がないときはボタンを隠す
             return;
         }
-        clearAllBtn.style.display = 'block';
+
+        clearAllBtn.style.display = 'block'; // 💡 曲があるときだけ表示
 
         state.queue.forEach((song, index) => {
             const item = document.createElement('div');
@@ -426,35 +462,17 @@
         }
     }
 
-    function debugLog(msg) 
-    {
-        statusText.innerText = msg;
-        console.log(msg);
-    }
-
-// 💡 修正：MediaSession（ロック画面・アイランド連携）の定義をiOS用に完全最適化
     function setupMediaSession(title) {
         if ('mediaSession' in navigator) {
-            try {
-                // 毎回新しくMetadataを生成し直すことで、iOSに「表示が更新された」ことを強制的に認識させます
-                navigator.mediaSession.metadata = new MediaMetadata({
-                    title: title,
-                    artist: 'My Sound Player',
-                    album: 'Local Storage',
-                    // iOSのロック画面やアイランドを格好よくするために、ダミーのアートワーク（黒画像など）を敷くと表示が安定します
-                    artwork: [
-                        { src: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512"><rect width="512" height="512" fill="%231e1e1e"/></svg>', sizes: '512x512', type: 'image/svg+xml' }
-                    ]
-                });
-
-                // 操作パネルのリモコンボタンとの連動（バックグラウンド時でも動くように再設定）
-                navigator.mediaSession.setActionHandler('play', () => { audioEngine.play(); });
-                navigator.mediaSession.setActionHandler('pause', () => { audioEngine.pause(); });
-                navigator.mediaSession.setActionHandler('previoustrack', () => { playPrev(); });
-                navigator.mediaSession.setActionHandler('nexttrack', () => { playNext(); });
-            } catch (error) {
-                console.log("MediaSession設定エラー:", error);
-            }
+            navigator.mediaSession.metadata = new MediaMetadata({
+                title: title,
+                artist: 'NMMP',
+                album: 'IndexedDB Storage'
+            });
+            navigator.mediaSession.setActionHandler('play', () => audioEngine.play());
+            navigator.mediaSession.setActionHandler('pause', () => audioEngine.pause());
+            navigator.mediaSession.setActionHandler('previoustrack', () => playPrev());
+            navigator.mediaSession.setActionHandler('nexttrack', () => playNext());
         }
     }
 </script>
