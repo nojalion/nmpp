@@ -298,8 +298,7 @@
                 setupMediaSession(songRecord.name.replace(/\.[^/.]+$/, ""));
             })
             .catch(err => {
-                console.log("再生エラー:", err);
-                statusText.innerText = "再生エラー: " + err.name + " / " + err.message; // ここを追加
+                debugLog("再生エラー: " + err.name + " / " + err.message);
             });
             
         updatePlaylistHighlight();
@@ -425,6 +424,12 @@
                 items[i].classList.remove('active');
             }
         }
+    }
+
+    function debugLog(msg) 
+    {
+        statusText.innerText = msg;
+        console.log(msg);
     }
 
 // 💡 修正：MediaSession（ロック画面・アイランド連携）の定義をiOS用に完全最適化
