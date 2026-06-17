@@ -340,29 +340,13 @@
     nextBtn.addEventListener('click', () => playNext());
     prevBtn.addEventListener('click', () => playPrev());
     
-    // 💡 修正：自動遷移（ended）のとき、iOSのバックグラウンドブロックをすり抜けるハック
     audioEngine.addEventListener('ended', () => {
         if (state.queue.length === 0) return;
         let nextIdx = state.currentIndex + 1;
         if (nextIdx >= state.queue.length) nextIdx = 0;
-        
-        state.currentIndex = nextIdx;
-        const songRecord = state.queue[nextIdx];
-        
-        // 1. まず何よりも先に次の音を鳴らす（これでiOSの通信・処理ブロックを解除させる）
-        audioEngine.src = generatedUrls[nextIdx];
-        audioEngine.play()
-            .then(() => {
-                // 2. 音が鳴ってiOSが「あ、このアプリ動いてるわ」と認めた瞬間（数ミリ秒後）に画面とロック画面を更新する
-                setTimeout(() => {
-                    titleView.innerText = songRecord.name.replace(/\.[^/.]+$/, "");
-                    updatePlaylistHighlight();
-                    setupMediaSession(songRecord.name.replace(/\.[^/.]+$/, ""));
-                }, 10);
-            })
-            .catch(err => console.log("バックグラウンド自動再生エラー:", err));
+        loadAndPlay(nextIdx);
     });
-    
+        
     audioEngine.addEventListener('play', () => { 
         state.isPlaying = true; 
         playBtn.innerText = '⏸'; 
