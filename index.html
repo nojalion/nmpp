@@ -165,10 +165,9 @@
         isPlaying: false
     };
 
-    // 💡 1つのエンジンだけを使い回し、絶対にiOSの音響権限を手放さない
+    // 💡 プレイヤーは1つだけ（iOSの権限を1つの要素に集約させる）
     const audioEngine = new Audio();
     audioEngine.preload = "auto";
-    let currentUrl = "";
 
     const picker = document.getElementById('audio-picker');
     const titleView = document.getElementById('current-title');
@@ -243,29 +242,34 @@
     window.addEventListener('DOMContentLoaded', async () => {
         statusText.innerText = "ライブラリを読み込み中...";
         await refreshLibrary();
-        statusText.innerText = "";
         
         if (state.queue.length > 0) {
             setupInitialTrack(0);
         }
     });
 
+    // 💡 【超重要】データベースのファイルを「ただのテキスト文字列（Base64）」に完全変換する
     async function refreshLibrary() {
         const rawSongs = await loadSongsFromDB();
         state.queue = [];
         
-        // 💡 究極の回避策：iOSがバックグラウンドでディスク接続を遮断する前に、
-        // 音楽データを完全にRAM（メモリ）の中にコピーして保護する
-        for (let song of rawSongs) {
-            try {
-                const arrayBuffer = await song.data.arrayBuffer();
-                const memoryBlob = new Blob([arrayBuffer], { type: song.data.type || 'audio/mpeg' });
-                state.queue.push({ name: song.name, data: memoryBlob });
-            } catch (err) {
-                console.log("メモリ読み込みエラー", err);
-                state.queue.push(song); 
-            }
+        for (let i = 0; i < rawSongs.length; i++) {
+            statusText.innerText = `iOS最適化中... (${i+1}/${rawSongs.length})`;
+            
+            // ファイルをData URI（テキスト）に変換。これでOSのファイル監視を完全に無効化！
+            const dataUrlString = await new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.readAsDataURL(rawSongs[i].data);
+            });
+            
+            state.queue.push({ 
+                name: rawSongs[i].name, 
+                dataUrl: dataUrlString // 仮想ファイルではなく、実データが詰まった巨大なテキスト
+            });
         }
+        
+        statusText.innerText = "";
         renderPlaylist();
     }
 
@@ -274,10 +278,10 @@
         if (files.length === 0) return;
 
         const wasEmpty = state.queue.length === 0;
-        statusText.innerText = "曲をアプリに保存中...";
+        statusText.innerText = "曲を保存中...";
         await Promise.all(files.map(file => saveSongToDB(file)));
         await refreshLibrary();
-        statusText.innerText = "保存が完了しました！";
+        statusText.innerText = "保存完了！";
         setTimeout(() => statusText.innerText = "", 3000);
 
         if (wasEmpty && state.queue.length > 0) {
@@ -291,22 +295,17 @@
         state.currentIndex = index;
         const songRecord = state.queue[index];
 
-        // メモリの無駄遣いとiOSのキャッシュバグを防ぐため、古いURLは毎回捨てる
-        if (currentUrl) URL.revokeObjectURL(currentUrl);
-
-        // RAM上にあるデータから、毎回新鮮なURLを即席で生成
-        currentUrl = URL.createObjectURL(songRecord.data);
-        audioEngine.src = currentUrl;
-        audioEngine.load(); // iOSにロードを強制
+        // 💡 ファイル参照ではなく、「文字列」を直接流し込むためiOSにブロックされない
+        audioEngine.src = songRecord.dataUrl;
         
         audioEngine.play()
             .then(() => {
-                // 再生が許可された直後に画面とロック画面を更新
+                // 再生が始まった瞬間にMediaSession（ロック画面）を更新
                 setTimeout(() => {
                     titleView.innerText = songRecord.name.replace(/\.[^/.]+$/, "");
                     updatePlaylistHighlight();
                     setupMediaSession(songRecord.name.replace(/\.[^/.]+$/, ""));
-                }, 10);
+                }, 50);
             })
             .catch(err => console.log("再生エラー:", err));
     }
@@ -323,22 +322,19 @@
         const songRecord = state.queue[index];
         titleView.innerText = songRecord.name.replace(/\.[^/.]+$/, "");
         
-        if (currentUrl) URL.revokeObjectURL(currentUrl);
-        currentUrl = URL.createObjectURL(songRecord.data);
-        audioEngine.src = currentUrl;
+        audioEngine.src = songRecord.dataUrl;
         
         updatePlaylistHighlight();
         setupMediaSession(songRecord.name.replace(/\.[^/.]+$/, ""));
     }
 
-    // 💡 バックグラウンドループの心臓部
+    // 💡 バックグラウンドループ処理
     audioEngine.addEventListener('ended', () => {
         if (state.queue.length === 0) return;
         let nextIdx = state.currentIndex + 1;
         if (nextIdx >= state.queue.length) nextIdx = 0; // ループ
         
-        // onendedのイベント内で、一切の遅延なくURLを差し替えてplay()を叩くことで、
-        // iOSに「これは同じアプリの連続再生だ」と強制的に認めさせる
+        // 即座に次の曲（テキストデータ）を流し込んで再生！
         assignAndPlay(nextIdx);
     });
 
@@ -377,12 +373,10 @@
 
     clearAllBtn.addEventListener('click', async () => {
         if (state.queue.length === 0) return;
-        if (confirm("アプリ内のすべての曲を一括削除しますか？\nこの操作は取り消せません。")) {
-            statusText.innerText = "ライブラリをクリア中...";
+        if (confirm("すべての曲を削除しますか？")) {
+            statusText.innerText = "クリア中...";
             audioEngine.pause();
             audioEngine.src = "";
-            if (currentUrl) URL.revokeObjectURL(currentUrl);
-            currentUrl = "";
             state.currentIndex = 0;
             state.isPlaying = false;
             await clearAllSongsFromDB();
