@@ -165,9 +165,8 @@
         isPlaying: false
     };
 
-    // 💡 プレイヤーは1つだけ（iOSの権限を1つの要素に集約させる）
+    // 💡 シンプルに1つのプレイヤーに戻します
     const audioEngine = new Audio();
-    audioEngine.preload = "auto";
 
     const picker = document.getElementById('audio-picker');
     const titleView = document.getElementById('current-title');
@@ -239,37 +238,33 @@
         });
     }
 
+    // 💡 すべてのBlob URLを一元管理する配列（メモリ上に永続化）
+    let generatedUrls = [];
+
+    // 💡 アプリ起動時やインポート時に、全曲分のURLをあらかじめ生成する関数
+    function revokeAllUrls() {
+        generatedUrls.forEach(url => URL.revokeObjectURL(url));
+        generatedUrls = [];
+    }
+
+    function prepareAllTrackUrls() {
+        revokeAllUrls(); // 古いURLがあれば一回綺麗に掃除
+        generatedUrls = state.queue.map(song => URL.createObjectURL(song.data));
+    }
+
     window.addEventListener('DOMContentLoaded', async () => {
         statusText.innerText = "ライブラリを読み込み中...";
         await refreshLibrary();
+        statusText.innerText = "";
         
         if (state.queue.length > 0) {
             setupInitialTrack(0);
         }
     });
 
-    // 💡 【超重要】データベースのファイルを「ただのテキスト文字列（Base64）」に完全変換する
     async function refreshLibrary() {
-        const rawSongs = await loadSongsFromDB();
-        state.queue = [];
-        
-        for (let i = 0; i < rawSongs.length; i++) {
-            statusText.innerText = `iOS最適化中... (${i+1}/${rawSongs.length})`;
-            
-            // ファイルをData URI（テキスト）に変換。これでOSのファイル監視を完全に無効化！
-            const dataUrlString = await new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result);
-                reader.readAsDataURL(rawSongs[i].data);
-            });
-            
-            state.queue.push({ 
-                name: rawSongs[i].name, 
-                dataUrl: dataUrlString // 仮想ファイルではなく、実データが詰まった巨大なテキスト
-            });
-        }
-        
-        statusText.innerText = "";
+        state.queue = await loadSongsFromDB();
+        prepareAllTrackUrls(); // 💡 ライブラリが更新されたら、その瞬間に全曲分のURLを作る！
         renderPlaylist();
     }
 
@@ -278,10 +273,10 @@
         if (files.length === 0) return;
 
         const wasEmpty = state.queue.length === 0;
-        statusText.innerText = "曲を保存中...";
+        statusText.innerText = "曲をアプリに保存中...";
         await Promise.all(files.map(file => saveSongToDB(file)));
         await refreshLibrary();
-        statusText.innerText = "保存完了！";
+        statusText.innerText = "保存が完了しました！";
         setTimeout(() => statusText.innerText = "", 3000);
 
         if (wasEmpty && state.queue.length > 0) {
@@ -289,32 +284,27 @@
         }
     });
 
-    // --- コア再生ロジック ---
-
-    function assignAndPlay(index) {
+// 💡 修正：iOSのバックグラウンド制限を回避するために、再生が始まった後に実行するように変更
+    function loadAndPlay(index) {
+        if (index < 0 || index >= state.queue.length) return;
         state.currentIndex = index;
-        const songRecord = state.queue[index];
 
-        // 💡 ファイル参照ではなく、「文字列」を直接流し込むためiOSにブロックされない
-        audioEngine.src = songRecord.dataUrl;
+        const songRecord = state.queue[index];
+        titleView.innerText = songRecord.name.replace(/\.[^/.]+$/, "");
+
+        audioEngine.src = generatedUrls[index];
         
         audioEngine.play()
             .then(() => {
-                // 再生が始まった瞬間にMediaSession（ロック画面）を更新
-                setTimeout(() => {
-                    titleView.innerText = songRecord.name.replace(/\.[^/.]+$/, "");
-                    updatePlaylistHighlight();
-                    setupMediaSession(songRecord.name.replace(/\.[^/.]+$/, ""));
-                }, 50);
+                // 💡 変更：音が鳴り始めた（iOSに権限が認められた）直後に、ロック画面を更新する
+                setupMediaSession(songRecord.name.replace(/\.[^/.]+$/, ""));
             })
             .catch(err => console.log("再生エラー:", err));
+            
+        updatePlaylistHighlight();
     }
 
-    function loadAndPlay(index) {
-        if (index < 0 || index >= state.queue.length) return;
-        assignAndPlay(index);
-    }
-
+// 💡 修正：初期装填時
     function setupInitialTrack(index) {
         if (index < 0 || index >= state.queue.length) return;
         state.currentIndex = index;
@@ -322,32 +312,11 @@
         const songRecord = state.queue[index];
         titleView.innerText = songRecord.name.replace(/\.[^/.]+$/, "");
         
-        audioEngine.src = songRecord.dataUrl;
+        audioEngine.src = generatedUrls[index];
         
         updatePlaylistHighlight();
         setupMediaSession(songRecord.name.replace(/\.[^/.]+$/, ""));
     }
-
-    // 💡 バックグラウンドループ処理
-    audioEngine.addEventListener('ended', () => {
-        if (state.queue.length === 0) return;
-        let nextIdx = state.currentIndex + 1;
-        if (nextIdx >= state.queue.length) nextIdx = 0; // ループ
-        
-        // 即座に次の曲（テキストデータ）を流し込んで再生！
-        assignAndPlay(nextIdx);
-    });
-
-    audioEngine.addEventListener('play', () => { 
-        state.isPlaying = true; 
-        playBtn.innerText = '⏸'; 
-        playBtn.classList.add('playing');
-    });
-    audioEngine.addEventListener('pause', () => { 
-        state.isPlaying = false; 
-        playBtn.innerText = '▶'; 
-        playBtn.classList.remove('playing');
-    });
 
     function playNext() {
         if (state.queue.length === 0) return;
@@ -370,13 +339,48 @@
 
     nextBtn.addEventListener('click', () => playNext());
     prevBtn.addEventListener('click', () => playPrev());
+    
+    // 💡 修正：自動遷移（ended）のとき、iOSのバックグラウンドブロックをすり抜けるハック
+    audioEngine.addEventListener('ended', () => {
+        if (state.queue.length === 0) return;
+        let nextIdx = state.currentIndex + 1;
+        if (nextIdx >= state.queue.length) nextIdx = 0;
+        
+        state.currentIndex = nextIdx;
+        const songRecord = state.queue[nextIdx];
+        
+        // 1. まず何よりも先に次の音を鳴らす（これでiOSの通信・処理ブロックを解除させる）
+        audioEngine.src = generatedUrls[nextIdx];
+        audioEngine.play()
+            .then(() => {
+                // 2. 音が鳴ってiOSが「あ、このアプリ動いてるわ」と認めた瞬間（数ミリ秒後）に画面とロック画面を更新する
+                setTimeout(() => {
+                    titleView.innerText = songRecord.name.replace(/\.[^/.]+$/, "");
+                    updatePlaylistHighlight();
+                    setupMediaSession(songRecord.name.replace(/\.[^/.]+$/, ""));
+                }, 10);
+            })
+            .catch(err => console.log("バックグラウンド自動再生エラー:", err));
+    });
+    
+    audioEngine.addEventListener('play', () => { 
+        state.isPlaying = true; 
+        playBtn.innerText = '⏸'; 
+        playBtn.classList.add('playing');
+    });
+    audioEngine.addEventListener('pause', () => { 
+        state.isPlaying = false; 
+        playBtn.innerText = '▶'; 
+        playBtn.classList.remove('playing');
+    });
 
     clearAllBtn.addEventListener('click', async () => {
         if (state.queue.length === 0) return;
-        if (confirm("すべての曲を削除しますか？")) {
-            statusText.innerText = "クリア中...";
+        if (confirm("アプリ内のすべての曲を一括削除しますか？\nこの操作は取り消せません。")) {
+            statusText.innerText = "ライブラリをクリア中...";
             audioEngine.pause();
             audioEngine.src = "";
+            revokeAllUrls(); // メモリ解放
             state.currentIndex = 0;
             state.isPlaying = false;
             await clearAllSongsFromDB();
@@ -438,21 +442,26 @@
         }
     }
 
+// 💡 修正：MediaSession（ロック画面・アイランド連携）の定義をiOS用に完全最適化
     function setupMediaSession(title) {
         if ('mediaSession' in navigator) {
             try {
+                // 毎回新しくMetadataを生成し直すことで、iOSに「表示が更新された」ことを強制的に認識させます
                 navigator.mediaSession.metadata = new MediaMetadata({
                     title: title,
                     artist: 'My Sound Player',
                     album: 'Local Storage',
+                    // iOSのロック画面やアイランドを格好よくするために、ダミーのアートワーク（黒画像など）を敷くと表示が安定します
                     artwork: [
                         { src: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512"><rect width="512" height="512" fill="%231e1e1e"/></svg>', sizes: '512x512', type: 'image/svg+xml' }
                     ]
                 });
-                navigator.mediaSession.setActionHandler('play', () => audioEngine.play());
-                navigator.mediaSession.setActionHandler('pause', () => audioEngine.pause());
-                navigator.mediaSession.setActionHandler('previoustrack', () => playPrev());
-                navigator.mediaSession.setActionHandler('nexttrack', () => playNext());
+
+                // 操作パネルのリモコンボタンとの連動（バックグラウンド時でも動くように再設定）
+                navigator.mediaSession.setActionHandler('play', () => { audioEngine.play(); });
+                navigator.mediaSession.setActionHandler('pause', () => { audioEngine.pause(); });
+                navigator.mediaSession.setActionHandler('previoustrack', () => { playPrev(); });
+                navigator.mediaSession.setActionHandler('nexttrack', () => { playNext(); });
             } catch (error) {
                 console.log("MediaSession設定エラー:", error);
             }
