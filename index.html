@@ -284,6 +284,7 @@
         }
     });
 
+// 💡 修正：iOSのバックグラウンド制限を回避するために、再生が始まった後に実行するように変更
     function loadAndPlay(index) {
         if (index < 0 || index >= state.queue.length) return;
         state.currentIndex = index;
@@ -291,14 +292,19 @@
         const songRecord = state.queue[index];
         titleView.innerText = songRecord.name.replace(/\.[^/.]+$/, "");
 
-        // 💡 データベースや新規生成は通らず、あらかじめ作ってあるURLをそのまま流し込むだけ！
         audioEngine.src = generatedUrls[index];
         
-        audioEngine.play().catch(err => console.log("再生エラー:", err));
+        audioEngine.play()
+            .then(() => {
+                // 💡 変更：音が鳴り始めた（iOSに権限が認められた）直後に、ロック画面を更新する
+                setupMediaSession(songRecord.name.replace(/\.[^/.]+$/, ""));
+            })
+            .catch(err => console.log("再生エラー:", err));
+            
         updatePlaylistHighlight();
-        setupMediaSession(songRecord.name.replace(/\.[^/.]+$/, ""));
     }
 
+// 💡 修正：初期装填時
     function setupInitialTrack(index) {
         if (index < 0 || index >= state.queue.length) return;
         state.currentIndex = index;
@@ -306,11 +312,12 @@
         const songRecord = state.queue[index];
         titleView.innerText = songRecord.name.replace(/\.[^/.]+$/, "");
         
-        audioEngine.src = generatedUrls[index]; // 💡 初期装填も事前生成URLから
+        audioEngine.src = generatedUrls[index];
         
         updatePlaylistHighlight();
         setupMediaSession(songRecord.name.replace(/\.[^/.]+$/, ""));
     }
+
 
     function playNext() {
         if (state.queue.length === 0) return;
@@ -334,9 +341,29 @@
     nextBtn.addEventListener('click', () => playNext());
     prevBtn.addEventListener('click', () => playPrev());
     
-    // 💡 曲が終わった時の処理（すでに次以降のURLも確定しているので100%確実に次へ行けます）
-    audioEngine.addEventListener('ended', () => playNext());
-    
+    // 💡 修正：自動遷移（ended）のとき、iOSのバックグラウンドブロックをすり抜けるハック
+    audioEngine.addEventListener('ended', () => {
+        if (state.queue.length === 0) return;
+        let nextIdx = state.currentIndex + 1;
+        if (nextIdx >= state.queue.length) nextIdx = 0;
+        
+        state.currentIndex = nextIdx;
+        const songRecord = state.queue[nextIdx];
+        
+        // 1. まず何よりも先に次の音を鳴らす（これでiOSの通信・処理ブロックを解除させる）
+        audioEngine.src = generatedUrls[nextIdx];
+        audioEngine.play()
+            .then(() => {
+                // 2. 音が鳴ってiOSが「あ、このアプリ動いてるわ」と認めた瞬間（数ミリ秒後）に画面とロック画面を更新する
+                setTimeout(() => {
+                    titleView.innerText = songRecord.name.replace(/\.[^/.]+$/, "");
+                    updatePlaylistHighlight();
+                    setupMediaSession(songRecord.name.replace(/\.[^/.]+$/, ""));
+                }, 10);
+            })
+            .catch(err => console.log("バックグラウンド自動再生エラー:", err));
+    });
+
     audioEngine.addEventListener('play', () => { 
         state.isPlaying = true; 
         playBtn.innerText = '⏸'; 
@@ -416,17 +443,29 @@
         }
     }
 
+    // 💡 修正：MediaSession（ロック画面・アイランド連携）の定義をiOS用に完全最適化
     function setupMediaSession(title) {
         if ('mediaSession' in navigator) {
-            navigator.mediaSession.metadata = new MediaMetadata({
-                title: title,
-                artist: 'NMMP',
-                album: 'IndexedDB Storage'
-            });
-            navigator.mediaSession.setActionHandler('play', () => audioEngine.play());
-            navigator.mediaSession.setActionHandler('pause', () => audioEngine.pause());
-            navigator.mediaSession.setActionHandler('previoustrack', () => playPrev());
-            navigator.mediaSession.setActionHandler('nexttrack', () => playNext());
+            try {
+                // 毎回新しくMetadataを生成し直すことで、iOSに「表示が更新された」ことを強制的に認識させます
+                navigator.mediaSession.metadata = new MediaMetadata({
+                    title: title,
+                    artist: 'My Sound Player',
+                    album: 'Local Storage',
+                    // iOSのロック画面やアイランドを格好よくするために、ダミーのアートワーク（黒画像など）を敷くと表示が安定します
+                    artwork: [
+                        { src: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512"><rect width="512" height="512" fill="%231e1e1e"/></svg>', sizes: '512x512', type: 'image/svg+xml' }
+                    ]
+                });
+
+                // 操作パネルのリモコンボタンとの連動（バックグラウンド時でも動くように再設定）
+                navigator.mediaSession.setActionHandler('play', () => { audioEngine.play(); });
+                navigator.mediaSession.setActionHandler('pause', () => { audioEngine.pause(); });
+                navigator.mediaSession.setActionHandler('previoustrack', () => { playPrev(); });
+                navigator.mediaSession.setActionHandler('nexttrack', () => { playNext(); });
+            } catch (error) {
+                console.log("MediaSession設定エラー:", error);
+            }
         }
     }
 </script>
