@@ -165,13 +165,8 @@
         isPlaying: false
     };
 
-    // 💡 解決策：2つのAudio要素（メイン再生用と、裏での先読み用）を用意
-    let currentAudio = new Audio();
-    let nextAudio = new Audio();
-    
-    // それぞれのオブジェクトURLマネージャー
-    let currentUrl = "";
-    let nextUrl = "";
+    // 💡 シンプルに1つのプレイヤーに戻します
+    const audioEngine = new Audio();
 
     const picker = document.getElementById('audio-picker');
     const titleView = document.getElementById('current-title');
@@ -243,6 +238,20 @@
         });
     }
 
+    // 💡 すべてのBlob URLを一元管理する配列（メモリ上に永続化）
+    let generatedUrls = [];
+
+    // 💡 アプリ起動時やインポート時に、全曲分のURLをあらかじめ生成する関数
+    function revokeAllUrls() {
+        generatedUrls.forEach(url => URL.revokeObjectURL(url));
+        generatedUrls = [];
+    }
+
+    function prepareAllTrackUrls() {
+        revokeAllUrls(); // 古いURLがあれば一回綺麗に掃除
+        generatedUrls = state.queue.map(song => URL.createObjectURL(song.data));
+    }
+
     window.addEventListener('DOMContentLoaded', async () => {
         statusText.innerText = "ライブラリを読み込み中...";
         await refreshLibrary();
@@ -255,6 +264,7 @@
 
     async function refreshLibrary() {
         state.queue = await loadSongsFromDB();
+        prepareAllTrackUrls(); // 💡 ライブラリが更新されたら、その瞬間に全曲分のURLを作る！
         renderPlaylist();
     }
 
@@ -274,27 +284,6 @@
         }
     });
 
-    // オーディオ要素にイベントを紐付ける共通関数
-    function bindAudioEvents(audio) {
-        audio.onplay = () => {
-            state.isPlaying = true;
-            playBtn.innerText = '⏸';
-            playBtn.classList.add('playing');
-        };
-        audio.onpause = () => {
-            state.isPlaying = false;
-            playBtn.innerText = '▶';
-            playBtn.classList.remove('playing');
-        };
-        // 💡 核心：現在の曲が終わったら、即座に次の曲にスイッチする
-        audio.onended = () => {
-            handleTrackEnded();
-        };
-    }
-
-    // 初期化時にバインド
-    bindAudioEvents(currentAudio);
-
     function loadAndPlay(index) {
         if (index < 0 || index >= state.queue.length) return;
         state.currentIndex = index;
@@ -302,18 +291,12 @@
         const songRecord = state.queue[index];
         titleView.innerText = songRecord.name.replace(/\.[^/.]+$/, "");
 
-        currentAudio.pause();
-        if (currentUrl) URL.revokeObjectURL(currentUrl);
-
-        currentUrl = URL.createObjectURL(songRecord.data);
-        currentAudio.src = currentUrl;
+        // 💡 データベースや新規生成は通らず、あらかじめ作ってあるURLをそのまま流し込むだけ！
+        audioEngine.src = generatedUrls[index];
         
-        currentAudio.play().catch(err => console.log("再生エラー:", err));
+        audioEngine.play().catch(err => console.log("再生エラー:", err));
         updatePlaylistHighlight();
         setupMediaSession(songRecord.name.replace(/\.[^/.]+$/, ""));
-
-        // 💡 再生が始まった瞬間に、次の曲を裏で「先読み（プリロード）」しておく
-        preloadNextTrack();
     }
 
     function setupInitialTrack(index) {
@@ -323,78 +306,21 @@
         const songRecord = state.queue[index];
         titleView.innerText = songRecord.name.replace(/\.[^/.]+$/, "");
         
-        currentAudio.pause();
-        if (currentUrl) URL.revokeObjectURL(currentUrl);
-
-        currentUrl = URL.createObjectURL(songRecord.data);
-        currentAudio.src = currentUrl;
+        audioEngine.src = generatedUrls[index]; // 💡 初期装填も事前生成URLから
         
         updatePlaylistHighlight();
         setupMediaSession(songRecord.name.replace(/\.[^/.]+$/, ""));
-        preloadNextTrack();
-    }
-
-    // 💡 裏で次の曲を読み込んでおく関数（フォアグラウンド中に実行される）
-    function preloadNextTrack() {
-        if (state.queue.length <= 1) return;
-
-        let nextIdx = state.currentIndex + 1;
-        if (nextIdx >= state.queue.length) nextIdx = 0; // ループ
-
-        const nextSong = state.queue[nextIdx];
-        
-        if (nextUrl) URL.revokeObjectURL(nextUrl);
-        nextUrl = URL.createObjectURL(nextSong.data);
-        
-        // もう一つのプレイヤーに次曲をロード（iOSが起きている間に装填！）
-        nextAudio.src = nextUrl;
-        nextAudio.load(); 
-    }
-
-    // 💡 曲が終わった時のスイッチ処理（バックグラウンドでも動作可能）
-    function handleTrackEnded() {
-        if (state.queue.length <= 1) {
-            currentAudio.play().catch(() => {});
-            return;
-        }
-
-        // 次のインデックスに更新
-        state.currentIndex++;
-        if (state.currentIndex >= state.queue.length) state.currentIndex = 0;
-
-        // メモリの入れ替え
-        if (currentUrl) URL.revokeObjectURL(currentUrl);
-        currentUrl = nextUrl;
-        nextUrl = ""; // 使用したためクリア
-
-        // プレイヤーのバトンタッチ
-        const tempAudio = currentAudio;
-        currentAudio = nextAudio;
-        nextAudio = tempAudio; // 空になったほうを次の待機用に
-
-        // イベントを新しいメインプレイヤーに紐付け直す
-        bindAudioEvents(currentAudio);
-
-        // 表示の更新
-        const songRecord = state.queue[state.currentIndex];
-        titleView.innerText = songRecord.name.replace(/\.[^/.]+$/, "");
-        updatePlaylistHighlight();
-        setupMediaSession(songRecord.name.replace(/\.[^/.]+$/, ""));
-
-        // 💡 既にロード済みなのでバックグラウンドでもノータイムで再生が許可される！
-        currentAudio.play().catch(err => console.log("バックグラウンド再生エラー:", err));
-
-        // 次の曲のために、再びフォアグラウンドチャンスを狙う、または次の先読みへ
-        preloadNextTrack();
     }
 
     function playNext() {
+        if (state.queue.length === 0) return;
         let nextIdx = state.currentIndex + 1;
         if (nextIdx >= state.queue.length) nextIdx = 0;
         loadAndPlay(nextIdx);
     }
 
     function playPrev() {
+        if (state.queue.length === 0) return;
         let prevIdx = state.currentIndex - 1;
         if (prevIdx < 0) prevIdx = state.queue.length - 1;
         loadAndPlay(prevIdx);
@@ -402,24 +328,33 @@
 
     playBtn.addEventListener('click', () => {
         if (state.queue.length === 0) return;
-        if (state.isPlaying) { currentAudio.pause(); } else { currentAudio.play().catch(() => {}); }
+        if (state.isPlaying) { audioEngine.pause(); } else { audioEngine.play().catch(() => {}); }
     });
 
     nextBtn.addEventListener('click', () => playNext());
     prevBtn.addEventListener('click', () => playPrev());
+    
+    // 💡 曲が終わった時の処理（すでに次以降のURLも確定しているので100%確実に次へ行けます）
+    audioEngine.addEventListener('ended', () => playNext());
+    
+    audioEngine.addEventListener('play', () => { 
+        state.isPlaying = true; 
+        playBtn.innerText = '⏸'; 
+        playBtn.classList.add('playing');
+    });
+    audioEngine.addEventListener('pause', () => { 
+        state.isPlaying = false; 
+        playBtn.innerText = '▶'; 
+        playBtn.classList.remove('playing');
+    });
 
     clearAllBtn.addEventListener('click', async () => {
         if (state.queue.length === 0) return;
         if (confirm("アプリ内のすべての曲を一括削除しますか？\nこの操作は取り消せません。")) {
             statusText.innerText = "ライブラリをクリア中...";
-            currentAudio.pause();
-            nextAudio.pause();
-            if (currentUrl) URL.revokeObjectURL(currentUrl);
-            if (nextUrl) URL.revokeObjectURL(nextUrl);
-            currentAudio.src = "";
-            nextAudio.src = "";
-            currentUrl = "";
-            nextUrl = "";
+            audioEngine.pause();
+            audioEngine.src = "";
+            revokeAllUrls(); // メモリ解放
             state.currentIndex = 0;
             state.isPlaying = false;
             await clearAllSongsFromDB();
@@ -488,8 +423,8 @@
                 artist: 'NMMP',
                 album: 'IndexedDB Storage'
             });
-            navigator.mediaSession.setActionHandler('play', () => currentAudio.play());
-            navigator.mediaSession.setActionHandler('pause', () => currentAudio.pause());
+            navigator.mediaSession.setActionHandler('play', () => audioEngine.play());
+            navigator.mediaSession.setActionHandler('pause', () => audioEngine.pause());
             navigator.mediaSession.setActionHandler('previoustrack', () => playPrev());
             navigator.mediaSession.setActionHandler('nexttrack', () => playNext());
         }
